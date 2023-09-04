@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Node.js Frontend</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Elastic search</h1>
+
+        <input type="text" id="searchInput" placeholder="Enter search term" list="suggestions">
+        
+        <style>
+            /* Additional inline style for input */
+            input[type="text"] {
+                width: 580px;
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #161616;
+                border-radius: 5px;
+                position: relative;
+            }
+        </style>
+        
+        <datalist id="suggestions"></datalist>
+
+        <ul id="resultsList"></ul>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
