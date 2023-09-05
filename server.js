@@ -6,8 +6,16 @@ const PORT = 3000;
 
 // Create an Elasticsearch client
 const elasticClient = new Client({
+    // cloud
     cloud: { id: 'cloud_id' },
-    auth: { apiKey: 'API_key' }
+    auth: { apiKey: 'API_key' },
+
+    // local
+    node: 'http://localhost:9200',
+    auth: {
+        username: 'elastic',
+        password: 'changeme'
+    }
 });
 
 const indexName = 'my_index';
@@ -23,12 +31,11 @@ async function testConnection() {
 
 async function checkIndex() {
     try {
-        const localData = JSON.parse(fs.readFileSync('localData.json', 'utf8'));
+        const localData = JSON.parse(fs.readFileSync('oslo-terminology.json', 'utf8'));
 
-        const scrollResponse = await elasticClient.search({
+        const response = await elasticClient.search({
             index: indexName,
-            scroll: '30s',
-            size: 1000,
+            size: 10000,
             body: {
                 query: {
                     match_all: {},
@@ -36,21 +43,26 @@ async function checkIndex() {
             },
         });
 
-        let elasticsearchDocuments = scrollResponse.hits.hits.map(hit => hit._source);
-
-        const elasticsearchLabels = new Set(elasticsearchDocuments.map(doc => doc.label));
+        let elasticsearchDocuments = response.hits.hits.map(hit => hit._source);
 
         const missingDocuments = [];
 
-        await Promise.all(localData.map(async localDoc => {
-            if (!elasticsearchLabels.has(localDoc.label)) {
-                missingDocuments.push(localDoc);
-            }
-        }));
+        // check if the document is already in the index
 
-        // Clear the scroll
-        await elasticClient.clearScroll({ scroll_id: scrollResponse._scroll_id });
-        
+        for (const localDocument of localData) {
+            const elasticsearchDocument = elasticsearchDocuments.find(doc => doc.id === localDocument.id);
+
+            if (!elasticsearchDocument) {
+                missingDocuments.push(localDocument);
+            }
+
+            // check if the document has changed
+            // use for loop to check each value and push to missingDocuments if changed
+            // use crypto to hash the document and compare the hash values to check if the document has changed (more efficient)
+        }
+
+        console.log(`${missingDocuments.length} documents missing in Elasticsearch.`);
+
         return missingDocuments;
     } catch (error) {
         console.error('Error:', error);
@@ -130,10 +142,14 @@ async function run() {
 
     await testConnection();
     if (!await elasticClient.indices.exists({ index: indexName })) {
-        await elasticClient.indices.create({
+        const response = await elasticClient.indices.create({
             index: indexName,
         });
+        console.log('Created index', response);
     }
+    const count = await elasticClient.count({ index: indexName });
+    console.log(`Index ${indexName} has ${count.count} documents.`);
+
     const missingDocuments = await checkIndex();
     await updateIndex(missingDocuments);
 }
