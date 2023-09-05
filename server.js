@@ -36,10 +36,8 @@ async function checkIndex() {
         const response = await elasticClient.search({
             index: indexName,
             size: 10000,
-            body: {
-                query: {
-                    match_all: {},
-                },
+            query: {
+                match_all: {},
             },
         });
 
@@ -92,11 +90,9 @@ app.post('/suggest', async (req, res) => {
         const response = await elasticClient.search({
             index: indexName,
             size: 10,
-            body: {
-                query: {
-                    prefix: {
-                        prefLabel: partialTerm
-                    }
+            query: {
+                prefix: {
+                    prefLabel: partialTerm
                 }
             }
         });
@@ -116,13 +112,11 @@ app.post('/search', async (req, res) => {
         const response = await elasticClient.search({
             index: indexName,
             size: 100,
-            body: {
-                query: {
-                    multi_match: {
-                        query: searchTerm,
-                        fields: ['prefLabel', 'definition'],
-                        fuzziness: 'AUTO'
-                    }
+            query: {
+                multi_match: {
+                    query: searchTerm,
+                    fields: ['prefLabel', 'definition'],
+                    fuzziness: 'AUTO'    
                 }
             }
         });
