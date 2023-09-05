@@ -31,7 +31,7 @@ async function testConnection() {
 
 async function checkIndex() {
     try {
-        const localData = JSON.parse(fs.readFileSync('oslo-terminology.json', 'utf8'));
+        const localData = JSON.parse(fs.readFileSync('localData.json', 'utf8'));
 
         const response = await elasticClient.search({
             index: indexName,
