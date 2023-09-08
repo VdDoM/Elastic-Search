@@ -6,19 +6,20 @@ const PORT = 3000;
 
 // Create an Elasticsearch client
 const elasticClient = new Client({
-    // cloud
-    cloud: { id: 'cloud_id' },
-    auth: { apiKey: 'API_key' },
-
-    // local
-    node: 'http://localhost:9200',
+    node: 'https://localhost:9200',
     auth: {
         username: 'elastic',
-        password: 'changeme'
+        password: 'change_me'
+    },
+    tls: {
+        rejectUnauthorized: false,
+        ca: fs.readFileSync('./resources/http_ca.crt'),
     }
 });
 
 const indexName = 'my_index';
+const localData = JSON.parse(fs.readFileSync('./resources/localData.jsonld', 'utf8'));
+const types = ['classes', 'attributes', 'dataTypes'];
 
 async function testConnection() {
     try {
@@ -31,8 +32,6 @@ async function testConnection() {
 
 async function checkIndex() {
     try {
-        const localData = JSON.parse(fs.readFileSync('localData.json', 'utf8'));
-
         const response = await elasticClient.search({
             index: indexName,
             size: 10000,
@@ -41,22 +40,18 @@ async function checkIndex() {
             },
         });
 
-        let elasticsearchDocuments = response.hits.hits.map(hit => hit._source);
+        const elasticsearchDocuments = response.hits.hits.map(hit => hit._source);
 
         const missingDocuments = [];
 
-        // check if the document is already in the index
+        for (const type in types) {
+            for (const localDocument of localData[types[type]]) {
+                const missingDocument = elasticsearchDocuments.find(doc => doc['@id'] === localDocument['@id']);
 
-        for (const localDocument of localData) {
-            const elasticsearchDocument = elasticsearchDocuments.find(doc => doc.id === localDocument.id);
-
-            if (!elasticsearchDocument) {
-                missingDocuments.push(localDocument);
+                if (!missingDocument) {
+                    missingDocuments.push(localDocument);
+                }
             }
-
-            // check if the document has changed
-            // use for loop to check each value and push to missingDocuments if changed
-            // use crypto to hash the document and compare the hash values to check if the document has changed (more efficient)
         }
 
         console.log(`${missingDocuments.length} documents missing in Elasticsearch.`);
@@ -70,7 +65,7 @@ async function checkIndex() {
 async function updateIndex(missingDocuments) {
     if (missingDocuments.length > 0) {
         const operations = missingDocuments.flatMap(doc => [
-            { index: { _index: indexName } },
+            { index: { _index: indexName, _id: doc['@id'] } },
             doc,
         ]);
         await elasticClient.bulk({ refresh: true, operations });
@@ -85,19 +80,51 @@ app.use(express.json());
 
 app.post('/suggest', async (req, res) => {
     const partialTerm = req.body.partialTerm;
+    const searchType = req.body.type;
+    const searchLanguage = req.body.language;
 
     try {
-        const response = await elasticClient.search({
+        const query = {
             index: indexName,
             size: 10,
+            _source: ['label.@value'],
+            sort: [
+                { 'label.@value.keyword': { order: 'asc' } }
+            ],
             query: {
-                prefix: {
-                    prefLabel: partialTerm
+                bool: {
+                    must: [
+                        {
+                            prefix: {
+                                'label.@value': partialTerm
+                            }
+                        }
+                    ]
                 }
             }
-        });
+        };
 
-        const suggestions = response.hits.hits.map(hit => hit._source.prefLabel);
+        if (searchType !== '_all') {
+            if (searchType === 'Attributes') {
+                query.query.bool.must.push({
+                    terms: { '@type.keyword': ['http://www.w3.org/2002/07/owl#DatatypeProperty', 'http://www.w3.org/2002/07/owl#ObjectProperty'] }
+                })
+            } else {
+                query.query.bool.must.push({
+                    term: { '@type.keyword': searchType }
+                });
+            }
+        }
+
+        if (searchLanguage !== '_all') {
+            query.query.bool.must.push({
+                term: { 'label.@language': searchLanguage }
+            });
+        }
+
+        const response = await elasticClient.search(query);
+
+        const suggestions = response.hits.hits.map(hit => hit._source.label[0]['@value']);
         res.json({ suggestions });
     } catch (error) {
         console.error('Elasticsearch Error:', error);
@@ -107,19 +134,51 @@ app.post('/suggest', async (req, res) => {
 
 app.post('/search', async (req, res) => {
     const searchTerm = req.body.term;
+    const searchType = req.body.type;
+    const searchLanguage = req.body.language;
 
     try {
-        const response = await elasticClient.search({
+        const query = {
             index: indexName,
             size: 100,
+            sort: [
+                { 'label.@value.keyword': { order: 'asc' } },
+            ],
+            _source: ['label.@value', 'definition.@value', '@type'],
             query: {
-                multi_match: {
-                    query: searchTerm,
-                    fields: ['prefLabel', 'definition'],
-                    fuzziness: 'AUTO'    
+                bool: {
+                    must: [
+                        {
+                            multi_match: {
+                                query: searchTerm,
+                                fields: ['label.@value', 'definition.@value'],
+                                fuzziness: 'AUTO'
+                            }
+                        }
+                    ]
                 }
             }
-        });
+        }
+
+        if (searchType !== '_all') {
+            if (searchType === 'Attributes') {
+                query.query.bool.must.push({
+                    terms: { '@type.keyword': ['http://www.w3.org/2002/07/owl#DatatypeProperty', 'http://www.w3.org/2002/07/owl#ObjectProperty'] }
+                })
+            } else {
+                query.query.bool.must.push({
+                    term: { '@type.keyword': searchType }
+                });
+            }
+        }
+
+        if (searchLanguage !== '_all') {
+            query.query.bool.must.push({
+                term: { 'label.@language': searchLanguage }
+            });
+        }
+
+        const response = await elasticClient.search(query);
 
         const searchResults = response.hits.hits.map(hit => hit._source);
         res.json({ results: searchResults });
@@ -134,7 +193,17 @@ async function run() {
         console.log(`Server is running on port ${PORT}`);
     });
 
-    await testConnection();
+    var connected = false;
+    while (!connected) {
+        try {
+            await testConnection();
+            connected = true;
+        } catch (error) {
+            console.error('Connection error:', error);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+
     if (!await elasticClient.indices.exists({ index: indexName })) {
         const response = await elasticClient.indices.create({
             index: indexName,
@@ -144,8 +213,15 @@ async function run() {
     const count = await elasticClient.count({ index: indexName });
     console.log(`Index ${indexName} has ${count.count} documents.`);
 
+    var startTime = performance.now()
     const missingDocuments = await checkIndex();
+    var endTime = performance.now()
+    console.log(`Checking index took ${endTime - startTime} milliseconds.`);
+
+    var startTime = performance.now()
     await updateIndex(missingDocuments);
+    var endTime = performance.now()
+    console.log(`Indexing took ${endTime - startTime} milliseconds.`);
 }
 
 run().catch(console.error);

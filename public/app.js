@@ -1,8 +1,47 @@
 const searchInput = document.getElementById('searchInput');
+const searchType = document.getElementById('searchType');
+const searchLanguage = document.getElementById('searchLanguage');
 const suggestionsList = document.getElementById('suggestions');
 const resultsList = document.getElementById('resultsList');
 
-searchInput.addEventListener('input', async () => {
+async function search() {
+    const searchTerm = searchInput.value;
+
+    const response = await fetch('/search', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ term: searchTerm, type: searchType.value, language: searchLanguage.value })
+    });
+
+    const data = await response.json();
+
+    resultsList.innerHTML = ''; // Clear previous results
+
+    data.results.forEach(result => {
+        const li = document.createElement('li');
+        li.classList.add('result-item'); // Add a class for styling purposes
+
+        const title = document.createElement('h3');
+        title.textContent = result.label[0]['@value']; // Main title
+        li.appendChild(title);
+
+        const niveau = document.createElement('p');
+        niveau.classList.add('niveau'); // Add a class for styling purposes
+        niveau.textContent = result['@type']; // Niveau text
+        li.appendChild(niveau);
+
+        const description = document.createElement('p');
+        description.classList.add('definition'); // Add a class for styling purposes
+        description.textContent = result.definition[0]['@value']; // Description text
+        li.appendChild(description);
+
+        resultsList.appendChild(li);
+    });
+}
+
+async function autoComplete() {
     const partialTerm = searchInput.value;
 
     const suggestResponse = await fetch('/suggest', {
@@ -10,7 +49,7 @@ searchInput.addEventListener('input', async () => {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ partialTerm })
+        body: JSON.stringify({ partialTerm, type: searchType.value, language: searchLanguage.value })
     });
 
     const suggestData = await suggestResponse.json();
@@ -29,44 +68,8 @@ searchInput.addEventListener('input', async () => {
 
     // Highlight current input text with grey suggestions
     const highlightedText = `<span class="highlight">${partialTerm}</span>`;
-});
+}
 
-// Handle search form submission
-searchInput.addEventListener('input', async () => {
-    const searchTerm = searchInput.value;
-
-    const response = await fetch('/search', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ term: searchTerm })
-    });
-
-    const data = await response.json();
-
-    resultsList.innerHTML = ''; // Clear previous results
-
-    data.results.forEach(result => {
-        const li = document.createElement('li');
-        li.classList.add('result-item'); // Add a class for styling purposes
-
-        const title = document.createElement('h3');
-        title.textContent = result.prefLabel; // Main title
-        li.appendChild(title);
-
-        const description = document.createElement('p');
-        description.classList.add('description'); // Add a class for styling purposes
-        description.textContent = result.definition; // Description text
-        li.appendChild(description);
-
-        resultsList.appendChild(li);
-    });
-});
-
-searchInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-        searchInput.blur(); // Blur the input field to exit
-        event.preventDefault(); // Prevent the default Enter key behavior
-    }
-});
+searchType.addEventListener('change', () => { autoComplete(); search(); });
+searchLanguage.addEventListener('change', () => { autoComplete(); search(); });
+searchInput.addEventListener('input', async () => { autoComplete(); search(); });

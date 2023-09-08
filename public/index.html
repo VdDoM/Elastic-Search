@@ -11,9 +11,8 @@
         <h1>Elastic search</h1>
 
         <input type="text" id="searchInput" placeholder="Enter search term" list="suggestions">
-        
+
         <style>
-            /* Additional inline style for input */
             input[type="text"] {
                 width: 580px;
                 padding: 10px;
@@ -23,7 +22,20 @@
                 position: relative;
             }
         </style>
-        
+
+        <select id="searchType">
+            <option value="_all">All</option>
+            <option value="Class">Class</option>
+            <option value="Attributes">Attributes</option>
+            <option value="DataType">Date Type</option>
+        </select>
+
+        <select id="searchLanguage">
+            <option value="_all">All</option>
+            <option value="nl">Nederlands</option>
+            <option value="en">English</option>
+        </select>
+
         <datalist id="suggestions"></datalist>
 
         <ul id="resultsList"></ul>
