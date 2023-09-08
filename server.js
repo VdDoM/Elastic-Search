@@ -35,7 +35,7 @@ async function checkIndex() {
     try {
         const response = await elasticClient.search({
             index: indexName,
-            size: 10000,
+            size: 100000,
             query: {
                 match_all: {},
             },
@@ -94,31 +94,30 @@ app.post('/suggest', async (req, res) => {
             ],
             query: {
                 bool: {
-                    must: [
-                        {
-                            prefix: {
-                                'label.@value': partialTerm
-                            }
+                    must: {
+                        prefix: {
+                            'label.@value': partialTerm
                         }
-                    ]
+                    },
+                    filter: []
                 }
             }
         };
 
         if (searchType !== '_all') {
             if (searchType === 'Attributes') {
-                query.query.bool.must.push({
+                query.query.bool.filter.push({
                     terms: { '@type.keyword': ['http://www.w3.org/2002/07/owl#DatatypeProperty', 'http://www.w3.org/2002/07/owl#ObjectProperty'] }
                 })
             } else {
-                query.query.bool.must.push({
+                query.query.bool.filter.push({
                     term: { '@type.keyword': searchType }
                 });
             }
         }
 
         if (searchLanguage !== '_all') {
-            query.query.bool.must.push({
+            query.query.bool.filter.push({
                 term: { 'label.@language': searchLanguage }
             });
         }
@@ -148,33 +147,32 @@ app.post('/search', async (req, res) => {
             _source: ['label.@value', 'definition.@value', '@type'],
             query: {
                 bool: {
-                    must: [
-                        {
-                            multi_match: {
-                                query: searchTerm,
-                                fields: ['label.@value', 'definition.@value'],
-                                fuzziness: 'AUTO'
-                            }
+                    must: {
+                        multi_match: {
+                            query: searchTerm,
+                            fields: ['label.@value', 'definition.@value'],
+                            fuzziness: 'AUTO'
                         }
-                    ]
+                    },
+                    filter: []
                 }
             }
         }
 
         if (searchType !== '_all') {
             if (searchType === 'Attributes') {
-                query.query.bool.must.push({
+                query.query.bool.filter.push({
                     terms: { '@type.keyword': ['http://www.w3.org/2002/07/owl#DatatypeProperty', 'http://www.w3.org/2002/07/owl#ObjectProperty'] }
                 })
             } else {
-                query.query.bool.must.push({
+                query.query.bool.filter.push({
                     term: { '@type.keyword': searchType }
                 });
             }
         }
 
         if (searchLanguage !== '_all') {
-            query.query.bool.must.push({
+            query.query.filter.must.push({
                 term: { 'label.@language': searchLanguage }
             });
         }
